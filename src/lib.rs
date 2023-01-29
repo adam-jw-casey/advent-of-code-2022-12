@@ -1,6 +1,7 @@
 use std::collections::HashSet;
+use std::cmp::min;
 
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub enum Move{
     Up,
     Down,
@@ -87,7 +88,7 @@ impl Surface{
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Player{
     pub position: Position,
     pub previous: HashSet<Position>
@@ -127,7 +128,7 @@ impl Player{
         }
     }
 
-    pub fn step(&mut self, dir: Move){
+    pub fn step(&mut self, dir: &Move){
         self.previous.insert(self.position);
 
         match dir{
@@ -144,9 +145,8 @@ impl Player{
     /// use advent_of_code_2022_12::Player;
     /// use advent_of_code_2022_12::Surface;
     /// use advent_of_code_2022_12::Move;
-    /// use std::collections::HashSet;
     ///
-    /// let player = Player::new(concat!(
+    /// let mut player = Player::new(concat!(
     ///     "Sabqponm\n",
     ///     "abcryxxl\n",
     ///     "accszExk\n",
@@ -163,30 +163,86 @@ impl Player{
     ///
     /// assert_eq!(
     ///     player.available_moves(&surface),
-    ///     HashSet::from([Move::Right, Move::Down])
+    ///     Vec::from([Move::Down, Move::Right])
+    /// );
+    /// player.step(&Move::Down);
+    /// assert_eq!(
+    ///     player.available_moves(&surface),
+    ///     Vec::from([Move::Right, Move::Up, Move::Down])
+    /// );
+    /// player.step(&Move::Right);
+    /// assert_eq!(
+    ///     player.available_moves(&surface),
+    ///     Vec::from([Move::Down, Move::Right, Move::Up, Move::Left])
     /// );
     /// ```
-    pub fn available_moves(&self, surface: &Surface) -> HashSet<Move>{
-        let mut moves = HashSet::new();
+    pub fn available_moves(&self, surface: &Surface) -> Vec<Move>{
+        let mut moves = Vec::new();
+        let this_height  = surface.heights[self.position.y][self.position.x];
 
-        if self.position.x < surface.width() - 1
-            && surface.heights[self.position.x][self.position.y] as u8 + 1 >= surface.heights[self.position.x+1][self.position.y] as u8{
-                moves.insert(Move::Right);
+        if self.position.x < surface.width() - 1{
+            let right_height = surface.heights[self.position.y][self.position.x+1];
+            if this_height as u8 + 1 >= right_height as u8{
+                moves.push((Move::Right, right_height));
+            }
         }
-        if self.position.x > 0
-            && surface.heights[self.position.x][self.position.y] as u8 + 1 >= surface.heights[self.position.x-1][self.position.y] as u8{
-                moves.insert(Move::Left);
+        if self.position.x > 0{
+            let left_height  = surface.heights[self.position.y][self.position.x-1];
+            if this_height as u8 + 1 >= left_height as u8{
+                moves.push((Move::Left, left_height));
+            }
         }
-        if self.position.y < surface.height() - 1
-            && surface.heights[self.position.x][self.position.y] as u8 + 1 >= surface.heights[self.position.x][self.position.y+1] as u8{
-                moves.insert(Move::Down);
+        if self.position.y < surface.height() - 1{
+            let down_height  = surface.heights[self.position.y+1][self.position.x];
+            if this_height as u8 + 1 >= down_height as u8{
+                moves.push((Move::Down, down_height));
+            }
         }
-        if self.position.y > 0
-            && surface.heights[self.position.x][self.position.y] as u8 + 1 >= surface.heights[self.position.x][self.position.y-1] as u8{
-                moves.insert(Move::Up);
+        if self.position.y > 0{
+            let up_height    = surface.heights[self.position.y-1][self.position.x];
+            if this_height as u8 + 1 >= up_height as u8{
+                moves.push((Move::Up, up_height));
+            }
         }
 
-        return moves;
+        moves.sort_unstable_by_key(|(_m,h)| *h as u8);
+        return moves.iter().rev().map(|(m,_h)| *m).collect();
+    }
+
+    // Returns the length of the shortest path to the top of surface
+    fn shortest_path(&self, surface: &Surface, max_depth: &usize, distmap: &mut Vec<Vec<usize>>) -> usize{
+        print!("x: {}, y: {}\r", self.position.x, self.position.y);
+        let mut new_max = *max_depth;
+        let mut paths = Vec::new();
+
+        if self.position == surface.best_signal{
+            println!("\nFound top in {} steps", self.previous.len());
+            return self.previous.len()
+        }else if self.previous.contains(&self.position){
+            return usize::MAX;
+        }else if self.previous.len() >= new_max - 1{
+            return usize::MAX;
+        }else{
+            for m in self.available_moves(surface).iter(){
+                let mut new_player = (*self).clone();
+                new_player.step(m);
+                paths.push(new_player.shortest_path(surface, &new_max, distmap));
+                new_max = min(*paths.last().unwrap(), new_max);
+            }
+
+            return *paths.iter().min().unwrap();
+        }
+    }
+
+    pub fn find_shortest_path(&self, surface: &Surface) -> usize{
+        self.shortest_path(
+            surface,
+            &usize::MAX,
+            &mut (0..surface.width())
+                .map(|_| (0..surface.height())
+                    .map(|_| usize::MAX)
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>())
     }
 }
 
@@ -205,6 +261,9 @@ impl Player{
 ///         "abdefghi"
 /// )));
 /// ```
-pub fn shortest_path(input_commands: &str) -> u32{
-    todo!();
+pub fn shortest_path(input: &str) -> usize{
+    let player = Player::new(input);
+    let surface = Surface::new(input);
+
+    return player.find_shortest_path(&surface);
 }
