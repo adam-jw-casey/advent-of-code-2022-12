@@ -211,18 +211,20 @@ impl Player{
 
     // Returns the length of the shortest path to the top of surface
     fn shortest_path(&self, surface: &Surface, max_depth: &usize, distmap: &mut Vec<Vec<usize>>) -> usize{
-        print!("x: {}, y: {}\r", self.position.x, self.position.y);
         let mut new_max = *max_depth;
         let mut paths = Vec::new();
 
         if self.position == surface.best_signal{
-            println!("\nFound top in {} steps", self.previous.len());
             return self.previous.len()
         }else if self.previous.contains(&self.position){
             return usize::MAX;
         }else if self.previous.len() >= new_max - 1{
             return usize::MAX;
+        }else if distmap[self.position.y][self.position.x] <= self.previous.len(){
+            return usize::MAX;
         }else{
+            distmap[self.position.y][self.position.x] = self.previous.len();
+
             for m in self.available_moves(surface).iter(){
                 let mut new_player = (*self).clone();
                 new_player.step(m);
@@ -238,8 +240,8 @@ impl Player{
         self.shortest_path(
             surface,
             &usize::MAX,
-            &mut (0..surface.width())
-                .map(|_| (0..surface.height())
+            &mut (0..surface.height())
+                .map(|_| (0..surface.width())
                     .map(|_| usize::MAX)
                     .collect::<Vec<_>>())
                 .collect::<Vec<_>>())
